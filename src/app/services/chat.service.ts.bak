@@ -1,0 +1,48 @@
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Message,N8nResponse } from '../models/message';
+import { BehaviorSubject, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+@Injectable({ providedIn: 'root' })
+export class ChatService {
+  private messages: Message[] = [];
+  private messagesSubject = new BehaviorSubject<Message[]>([]);
+  private webhookUrl = 'http://localhost:5678/webhook-test/agent-router'; // Replace with your actual URL
+
+  constructor(private http: HttpClient) {}
+
+  getMessages(): Observable<Message[]> {
+    return this.messagesSubject.asObservable();
+  }
+
+  sendMessage(userInput: string): Observable<Message> {
+    const userMessage: Message = {
+      sender: 'user',
+      content: userInput,
+      timestamp: new Date()
+    };
+    this.messages.push(userMessage);
+    this.messagesSubject.next([...this.messages]);
+
+    return this.http.post<{ output: string }>(this.webhookUrl, { text: userInput }).pipe(
+      map(response => {
+         const extractedAnswer = extractFinalAnswer(response.answer);
+		 console.log(extractedAnswer)
+    const botMessage: Message = {
+      sender: 'bot',
+      content: `${extractedAnswer}\n⏱️ Response time: ${response.response_time_sec.toFixed(2)} sec`,
+      timestamp: new Date()
+    };
+        this.messages.push(botMessage);
+        this.messagesSubject.next([...this.messages]);
+        return botMessage;
+      })
+    );
+  }
+  function extractFinalAnswer(raw: string): string {
+  const match = raw.match(/Answer:\s*(.*)/i);
+  return match ? match[1].trim() : raw;
+}
+
+}
